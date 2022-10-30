@@ -30,7 +30,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = ["black", "isort", "flake8", "pre-commit"]
+dev = ["black", "isort", "flake8", "flake8-pyproject", "pre-commit"]
 
 [tool.setuptools]
 zip-safe = false
