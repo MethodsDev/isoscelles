@@ -1,0 +1,10 @@
+h5py
+leidenalg
+matplotlib
+numba
+numpy
+pandas
+pynndescent
+scipy
+sparse
+zarr

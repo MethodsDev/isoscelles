@@ -7,7 +7,7 @@ name = "mas-tools"
 description = "Utilities for analyzing MAS-iso-seq data"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {file = "LICENSE.md"}
+license = {file = "LICENSE"}
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -15,27 +15,11 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
-dependencies = [
-    "h5py",
-    "leidenalg",
-    "matplotlib",
-    "numba",
-    "numpy",
-    "pandas",
-    "pynndescent",
-    "scipy",
-    "sparse",
-    "zarr",
-]
-dynamic = ["version"]
-
-[project.optional-dependencies]
-dev = ["black", "isort", "flake8", "flake8-pyproject", "pre-commit"]
-
-[tool.setuptools]
-zip-safe = false
+dynamic = ["dependencies", "optional-dependencies", "version"]
 
 [tool.setuptools.dynamic]
+dependencies = {file = "requirements.txt"}
+optional-dependencies = {dev = {file = "dev-requirements.txt"}}
 version = {attr = "mas_tools.__version__"}
 
 [tool.black]
@@ -56,6 +40,4 @@ line_length = 88
 max-line-length = 88
 exclude = ['.git', '.tox', 'venv']
 ignore = ['E203', 'E231', 'E501', 'W503']
-per-file-ignores = [
-    '__init__.py:F401',
-]
+per-file-ignores = ['__init__.py:F401']
