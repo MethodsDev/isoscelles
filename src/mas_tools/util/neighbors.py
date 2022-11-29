@@ -10,6 +10,7 @@ from numcodecs import Blosc
 log = logging.getLogger(__name__)
 
 
+# TODO: this seems to be causing issues, maybe pynndescent bug
 @nb.njit(parallel=True, fastmath=True)
 def translate_kng(node_subset: np.ndarray, kng: np.ndarray):
     """
@@ -285,7 +286,7 @@ def write_knn_to_zarr(
     kng: np.ndarray,
     knd: np.ndarray,
     zarr_path: Union[str, Path],
-    chunk_rows: int = 100000,
+    chunk_rows: int = 100_000,
     overwrite: bool = False,
 ):
     """
@@ -311,7 +312,7 @@ def write_edges_to_zarr(
     edges: np.ndarray,
     weights: np.ndarray,
     zarr_path: Union[str, Path],
-    chunk_rows: int = 100000,
+    chunk_rows: int = 100_000,
     overwrite: bool = False,
 ):
     """

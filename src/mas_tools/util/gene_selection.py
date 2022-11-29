@@ -11,7 +11,7 @@ ArrayLike = Union[np.ndarray, da.Array]
 
 
 # blockwise poisson fit of gene counts
-def dask_pblock(counts: ArrayLike, numis: ArrayLike = None, blocksize: int = 128000):
+def dask_pblock(counts: ArrayLike, numis: ArrayLike = None, blocksize: int = 128_000):
     n_cells = counts.shape[0]
 
     # pre-compute these values
