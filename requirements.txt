@@ -1,6 +1,5 @@
 h5py
 leidenalg
-matplotlib
 numba
 numpy
 pandas

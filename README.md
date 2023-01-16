@@ -1,3 +1,3 @@
-### mas-tools
+### isoscelles
 
-This package contains generic tools for processing mas-iso-seq data.
+This package contains useful functions for processing single-cell mas-iso-seq data.

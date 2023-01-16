@@ -3,8 +3,8 @@ requires = ["setuptools >= 61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mas-tools"
-description = "Utilities for analyzing MAS-iso-seq data"
+name = "isoscelles"
+description = "Tools for isoform-level analysis of single-cell data, primarily MAS-iso-seq"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
@@ -17,10 +17,13 @@ classifiers = [
 ]
 dynamic = ["dependencies", "optional-dependencies", "version"]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.setuptools.dynamic]
 dependencies = {file = "requirements.txt"}
 optional-dependencies = {dev = {file = "dev-requirements.txt"}}
-version = {attr = "mas_tools.__version__"}
+version = {attr = "mdl.isoscelles.__version__"}
 
 [tool.black]
 line-length = 88
