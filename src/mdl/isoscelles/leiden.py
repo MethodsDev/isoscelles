@@ -1,8 +1,6 @@
 import logging
 from collections import Counter
-from typing import Dict, List
 
-import dask.array as da
 import igraph as ig
 import leidenalg as la
 import numpy as np
@@ -10,19 +8,11 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 
-def load_graph(n_cells: int, input_zarr: str):
-    return ig.Graph(
-        n=n_cells,
-        edges=da.from_zarr(input_zarr, "edges").compute(),
-        edge_attrs={"weight": da.from_zarr(input_zarr, "weights").compute()},
-    )
-
-
 def leiden_sweep(
     graph: ig.Graph,
-    res_list: List[float],
+    res_list: list[float],
     cutoff: float = None,
-    cached_arrays: Dict[float, np.ndarray] = None,
+    cached_arrays: dict[float, np.ndarray] = None,
 ):
     membership = None
     opt = la.Optimiser()

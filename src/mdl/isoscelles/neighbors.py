@@ -1,43 +1,9 @@
 import logging
-from pathlib import Path
-from typing import Union
 
-import dask.array as da
 import numba as nb
 import numpy as np
-from numcodecs import Blosc
 
 log = logging.getLogger(__name__)
-
-
-# TODO: this seems to be causing issues, maybe pynndescent bug
-@nb.njit(parallel=True, fastmath=True)
-def translate_kng(node_subset: np.ndarray, kng: np.ndarray):
-    """
-    Subset a kNN graph to only the edges between the included nodes, filling
-    in the rest with random edges inside the range. Can be used to initialize
-    the creation of a new kNN for these nodes.
-
-    :param node_subset: a boolean array specifying which nodes to include
-    :param kng: the original k-neighbors graph to process into a new graph
-    """
-
-    n_c = node_subset.sum()
-    nz = node_subset.nonzero()[0]
-    cs = (~node_subset).cumsum()
-
-    # values of -1 will be set to random neighbors by NNDescent
-    new_kng = -1 * np.ones((n_c, kng.shape[1]), np.int32)
-
-    for ii in nb.prange(n_c):
-        i = nz[ii]
-        j = 1
-        for k in kng[i, :]:
-            if node_subset[k]:
-                new_kng[ii, j] = k - cs[k]
-                j += 1
-
-    return new_kng
 
 
 @nb.njit(parallel=True, fastmath=True)
@@ -280,55 +246,3 @@ def kng_to_full_jaccard(kng: np.ndarray, min_weight: float = 0.0):
 
     ix = weights > min_weight
     return edges[ix, :], weights[ix]
-
-
-def write_knn_to_zarr(
-    kng: np.ndarray,
-    knd: np.ndarray,
-    zarr_path: Union[str, Path],
-    chunk_rows: int = 100_000,
-    overwrite: bool = False,
-):
-    """
-    Writes kNN graph and distances to disk as zarr files
-    """
-    log.debug(f"Writing neighbor graph to {zarr_path}/kng")
-    da.array(kng.astype(np.int32)).rechunk((chunk_rows, kng.shape[1])).to_zarr(
-        zarr_path,
-        "kng",
-        overwrite=overwrite,
-        compressor=Blosc(cname="lz4hc", clevel=9, shuffle=Blosc.AUTOSHUFFLE),
-    )
-    log.debug(f"Writing edge distances to {zarr_path}/knd")
-    da.array(knd).rechunk((chunk_rows, knd.shape[1])).to_zarr(
-        zarr_path,
-        "knd",
-        overwrite=overwrite,
-        compressor=Blosc(cname="lz4hc", clevel=9, shuffle=Blosc.AUTOSHUFFLE),
-    )
-
-
-def write_edges_to_zarr(
-    edges: np.ndarray,
-    weights: np.ndarray,
-    zarr_path: Union[str, Path],
-    chunk_rows: int = 100_000,
-    overwrite: bool = False,
-):
-    """
-    Writes edge and weight arrays to disk as zarr files
-    """
-    log.debug(f"Writing edges to {zarr_path}/edges")
-    da.array(edges.astype(np.int32)).rechunk((chunk_rows, 2)).to_zarr(
-        zarr_path,
-        "edges",
-        overwrite=overwrite,
-        compressor=Blosc(cname="lz4hc", clevel=9, shuffle=Blosc.AUTOSHUFFLE),
-    )
-    log.debug(f"Writing edge weights to {zarr_path}/weights")
-    da.array(weights).rechunk((chunk_rows,)).to_zarr(
-        zarr_path,
-        "weights",
-        overwrite=overwrite,
-        compressor=Blosc(cname="lz4hc", clevel=9, shuffle=Blosc.AUTOSHUFFLE),
-    )

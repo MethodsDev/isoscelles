@@ -1,12 +1,7 @@
-from typing import Union
-
-import dask.array as da
 import numba as nb
 import numpy as np
 
 from .stats import mannwhitneyu
-
-ArrayLike = Union[np.ndarray, da.Array]
 
 
 @nb.njit
@@ -42,7 +37,7 @@ def calc_subsample(n_samples: int, subsample: int):
 
 
 def de(
-    data: ArrayLike,
+    data: np.ndarray,
     clusters: np.ndarray,
     group1: np.ndarray,
     group2: np.ndarray,
@@ -61,9 +56,6 @@ def de(
         if subsample is not None:
             ds_a = ds_a[calc_subsample(ds_a.shape[0], subsample), :]
             ds_b = ds_b[calc_subsample(ds_b.shape[0], subsample), :]
-
-        if isinstance(data, da.Array):
-            ds_a, ds_b = da.compute(ds_a, ds_b)
 
         u, logp = mannwhitneyu(ds_a, ds_b)
 

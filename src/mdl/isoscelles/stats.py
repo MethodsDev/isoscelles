@@ -4,7 +4,7 @@ import scipy.stats
 
 
 @nb.njit(parallel=True)
-def tiecorrect(rankvals):
+def tiecorrect(rankvals: np.ndarray):
     """
     parallelized version of scipy.stats.tiecorrect
 
@@ -26,7 +26,7 @@ def tiecorrect(rankvals):
 
 
 @nb.njit(parallel=True)
-def rankdata(data):
+def rankdata(data: np.ndarray):
     """
     parallelized version of scipy.stats.rankdata
 
@@ -75,7 +75,7 @@ def spearmanr(x: np.ndarray):
     return r, logp
 
 
-def mannwhitneyu(x, y, use_continuity=True):
+def mannwhitneyu(x: np.ndarray, y: np.ndarray, use_continuity: bool = True):
     """
     Version of Mann-Whitney U-test that runs in parallel on 2d arrays
 

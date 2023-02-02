@@ -2,8 +2,6 @@ h5py
 leidenalg
 numba
 numpy
-pandas
 pynndescent
 scipy
 sparse
-zarr
