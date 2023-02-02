@@ -46,7 +46,7 @@ def leiden_sweep(
                 weights="weight",
                 resolution_parameter=res,
             )
-            opt.optimise_partition(partition)
+            opt.optimise_partition(partition, n_iterations=-1)
             membership = partition.membership
 
         membership_arrays[res] = np.array(membership)
