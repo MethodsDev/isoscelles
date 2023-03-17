@@ -49,7 +49,8 @@ def leiden_sweep(
 
         if cutoff is not None and c0c1_ratio < cutoff:
             log.info(
-                f"Reached nontrivial clustering with c0/c1 ratio {c0c1_ratio:.1f}, stopping"
+                f"Reached nontrivial clustering with c0/c1 ratio {c0c1_ratio:.1f},"
+                " stopping"
             )
             break
     else:
