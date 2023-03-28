@@ -1,5 +1,6 @@
 import logging
 
+import igraph as ig
 import numba as nb
 import numpy as np
 
@@ -246,3 +247,15 @@ def kng_to_full_jaccard(kng: np.ndarray, min_weight: float = 0.0):
 
     ix = weights > min_weight
     return edges[ix, :], weights[ix]
+
+
+def calc_graph(data: np.ndarray, n: int = 100):
+    """
+    Compute the shared nearest neighbor graph. This means computing a kNN graph
+    and then computing the Jaccard similarity of the neighbors for each pair of
+    cells.
+
+    `data` should be a numpy ndarray (*not* a sparse array)
+    """
+    edges, weights = k_jaccard_edgelist(data, n)
+    return ig.Graph(n=data.shape[0], edges=edges, edge_attrs={"weight": weights})

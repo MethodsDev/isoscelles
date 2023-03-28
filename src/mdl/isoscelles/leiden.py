@@ -1,9 +1,14 @@
 import logging
-from collections import Counter
+from collections import Counter, defaultdict
 
 import igraph as ig
 import leidenalg as la
 import numpy as np
+from sparse import GCXS
+
+from .gene_selection import fit_poission
+from .neighbors import calc_graph
+
 
 log = logging.getLogger(__name__)
 
@@ -11,6 +16,7 @@ log = logging.getLogger(__name__)
 def leiden_sweep(
     graph: ig.Graph,
     res_list: list[float],
+    *,
     cutoff: float = None,
     cached_arrays: dict[float, np.ndarray] = None,
 ):
@@ -60,3 +66,118 @@ def leiden_sweep(
             )
 
     return membership_arrays, membership_counts
+
+
+def subcluster(
+    data: GCXS | np.ndarray,
+    res_list: list[float],
+    *,
+    jacc_n: int = 80,
+    feature_cutoff_pct: float = 0.05,
+    feature_cutoff_logp: int | float = -5,
+):
+    """
+    Cluster the input data over a list of different resolutions. Note that
+    this code computes an exact kNN which involves an all-by-all distance
+    calculation. For larger data it is better to approximately compute kNN
+
+    Args:
+        data: an array (ndarray or sparse compressed rows) of raw count data
+        res_list: list of clustering resolutions to perform
+        jacc_n: number of neighbors in the kNN and SNN calculations
+        feature_cutoff_pct: threshold for delta between expected and observed % nonzero
+        feature_cutoff_logp threshold for log p-value on expected % nonzero
+    """
+    # select genes for this cell population
+    is_sparse = isinstance(data, GCXS)
+    exp_nz, pct, exp_p = fit_poission(data, sparse=is_sparse)
+    selected_feat = ((exp_nz - pct) > feature_cutoff_pct) & (
+        exp_p < feature_cutoff_logp
+    )
+    exp = np.sqrt(data[:, selected_feat])
+    if is_sparse:
+        exp = exp.todense()
+
+    # compute shared nearest-neighbor graph
+    graph = calc_graph(exp, n=jacc_n)
+    if len(graph.components()) > 1:
+        # SNN graph has multiple distinct components, this is likely
+        # too fragmented to meaningfully cluster
+        return {1: np.zeros(data.shape[0], dtype=int)}, {0: data.shape[0]}
+
+    # perform leiden clustering over a range of resolutions
+    return leiden_sweep(graph, res_list)
+
+
+def recursive_cluster(
+    data: GCXS | np.ndarray,
+    res_list: list[float],
+    *,
+    jacc_n: int = 80,
+    feature_cutoff_pct: float = 0.05,
+    feature_cutoff_logp: int | float = -5,
+    cluster_ratio: int | float = 4,
+):
+    """
+    Given a complete dataset, recursively subcluster the cells until no more clusters
+    can be found using the given thresholds.
+
+    Args:
+        data: a sparse array (compressed rows) of raw count data
+        res_list: list of clustering resolutions to perform
+        jacc_n: number of neighbors in the kNN and SNN calculations
+        feature_cutoff_pct: threshold for delta between expected and observed % nonzero
+        feature_cutoff_logp threshold for log p-value on expected % nonzero
+        cluster_ratio: cutoff for calling a clustering as nontrivial. We select
+                       the lowest resolution such that |c0| < cluster_ratio * |c1|
+    """
+    next_level = [()]
+    clusters = defaultdict(lambda: -1 * np.ones(data.shape[0], dtype=int))
+    cluster_res = {}  # record the resolution we used at each level
+
+    # starting from the full data, go down the clustering tree, stopping when
+    # there doesn't seem to be multiple clusters anymore
+    while len(next_level):
+        lvl = next_level.pop()
+        if lvl == ():
+            ci = np.ones(data.shape[0], dtype=bool)
+            rl = res_list
+        else:
+            ci = clusters[lvl[:-1]] == lvl[-1]
+            rl = [r for r in res_list if r >= cluster_res[lvl[:-1]] / 10]
+
+        log.debug(f"Clustering {lvl} with {ci.sum()} cells")
+
+        res_arrays, res_counts = subcluster(
+            data[ci, :],
+            res_list=rl,
+            jacc_n=jacc_n,
+            pct_cutoff=feature_cutoff_pct,
+            logp_cutoff=feature_cutoff_logp,
+        )
+        # find the lowest resolution where cluster 0 doesn't dominate.
+        # if there isn't one, we're done
+        res = min(
+            (
+                r
+                for r, v in res_counts.items()
+                if len(v) > 1 and v[0] < cluster_ratio * v[1]
+            ),
+            default=1,
+        )
+        if res == 1:
+            log.debug(f"Reached leaf clustering at {lvl}")
+            continue
+
+        # save the selected resolution and clustering
+        cluster_res[lvl] = res
+        clusters[lvl][ci] = res_arrays[res]
+
+        # subcluster the results if they have enough cells
+        # for the SNN network calculation
+        next_level.extend(
+            lvl + (i,) for i in res_counts[res] if res_counts[res][i] > jacc_n
+        )
+
+    # convert to dict so output can be pickled and to prevent extra keys
+    return dict(clusters), cluster_res
