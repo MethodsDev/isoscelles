@@ -25,13 +25,7 @@ dependencies = {file = "requirements.txt"}
 optional-dependencies = {dev = {file = "dev-requirements.txt"}}
 version = {attr = "mdl.isoscelles.__version__"}
 
-[tool.black]
-line-length = 88
-target-version = ["py39"]
-include = '\.pyi?$'
-
 [tool.ruff]
-line-length = 88
 src = ["src"]
 ignore = ["E501"]
 
