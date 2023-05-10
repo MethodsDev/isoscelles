@@ -152,8 +152,8 @@ def recursive_cluster(
             data[ci, :],
             res_list=rl,
             jacc_n=jacc_n,
-            pct_cutoff=feature_cutoff_pct,
-            logp_cutoff=feature_cutoff_logp,
+            feature_cutoff_pct=feature_cutoff_pct,
+            feature_cutoff_logp=feature_cutoff_logp,
         )
         # find the lowest resolution where cluster 0 doesn't dominate.
         # if there isn't one, we're done
