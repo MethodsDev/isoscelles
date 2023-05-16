@@ -9,7 +9,6 @@ from sparse import GCXS
 from .gene_selection import fit_poission
 from .neighbors import calc_graph
 
-
 log = logging.getLogger(__name__)
 
 

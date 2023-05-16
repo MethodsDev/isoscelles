@@ -27,6 +27,7 @@ version = {attr = "mdl.isoscelles.__version__"}
 
 [tool.ruff]
 src = ["src"]
+select = ["E", "F", "I", "A"]
 ignore = ["E501"]
 
 [tool.ruff.per-file-ignores]
