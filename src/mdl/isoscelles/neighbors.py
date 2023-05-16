@@ -137,21 +137,26 @@ def full_sparse_cosine_similarity(
         if u_norms[i] == 0.0:
             continue
 
-        for j in nb.prange(i + 1, n):
+        for j in range(i + 1, n):
             if u_norms[j] == 0.0:
                 continue
 
-            p0 = indptr[i]
+            p = indptr[i]
             p1 = indptr[i + 1]
 
-            q0 = indptr[j]
+            q = indptr[j]
             q1 = indptr[j + 1]
 
             udotv = 0.0
-            for ii in range(p0, p1):
-                for jj in range(q0, q1):
-                    if indices[ii] == indices[jj]:
-                        udotv += data[ii] * data[jj]
+            while p < p1 and q < q1:
+                if indices[p] == indices[q]:
+                    udotv += data[p] * data[q]
+                    p += 1
+                    q += 1
+                elif indices[p] < indices[q]:
+                    p += 1
+                else:
+                    q += 1
 
             similarity[i, j] = udotv / (u_norms[i] * u_norms[j])
             similarity[j, i] = similarity[i, j]
@@ -322,7 +327,7 @@ def k_jaccard_edgelist(data: np.ndarray | sparse.GCXS, k: int, min_weight: float
     """
     Creates a Jaccard edgelist by calculating all-by-all similarities first.
     For smaller n, this is faster than using the NNDescent algorithm,
-    at the expense of temporarily higher memory usage
+    at the expense of temporarily higher memory usage.
     """
     if isinstance(data, sparse.GCXS):
         sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
