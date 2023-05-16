@@ -3,6 +3,7 @@ import logging
 import igraph as ig
 import numba as nb
 import numpy as np
+import sparse
 
 log = logging.getLogger(__name__)
 
@@ -13,22 +14,45 @@ def kng_to_edgelist(kng: np.ndarray, knd: np.ndarray, min_weight: float = 0.0):
     Convert a knn graph and distances into an array of unique edges with weights.
     Removes self-edges. Note: does *not* convert distances to similarity scores
     """
-    n, m = kng.shape
-    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), m), kng.flatten())).T
-    weights = np.zeros(n * m, dtype=knd.dtype)
+    n, k = kng.shape
+    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), k), kng.flatten())).T
+    weights = np.zeros(n * k, dtype=knd.dtype)
 
     for i in nb.prange(n):
         for jj, j in enumerate(kng[i, :]):
             if i < j:
                 # this edge is fine
-                weights[i * m + jj] = knd[i, jj]
+                weights[i * k + jj] = knd[i, jj]
             elif i > j:
                 for k in kng[j, :]:
                     if i == k:
                         # this is already included on the other end
                         break
                 else:
-                    weights[i * m + jj] = knd[i, jj]
+                    weights[i * k + jj] = knd[i, jj]
+
+    ix = weights > min_weight
+    return edges[ix, :], weights[ix]
+
+
+@nb.njit(parallel=True, fastmath=True)
+def similarity_to_edgelist(sims: np.ndarray, min_weight: float = 0.0):
+    """
+    Convert from a cosine similarity matrix to the cosine similarity graph
+    """
+    n = sims.shape[0]
+
+    nc2 = n * (n - 1) // 2
+    edges = np.empty((nc2, 2), dtype=np.int32)
+    weights = np.zeros(nc2, dtype=np.float64)
+
+    for i in nb.prange(n - 1):
+        nic2 = (n - i) * (n - i - 1) // 2
+        for j in range(i + 1, n):
+            k = nc2 - nic2 + (j - i - 1)
+            edges[k, 0] = i
+            edges[k, 1] = j
+            weights[k] = sims[i, j]
 
     ix = weights > min_weight
     return edges[ix, :], weights[ix]
@@ -64,81 +88,96 @@ def full_cosine_similarity(data: np.ndarray):
     Computes all-by-all cosine similarities and returns the dense array
     """
     n = data.shape[0]
-    dist = np.eye(n, dtype=np.float64)
+    similarity = np.eye(n, dtype=np.float64)
 
     # computing similarity here so higher -> better
     for i in nb.prange(n - 1):
         for j in range(i + 1, n):
-            dist[i, j] = cosine_similarity(data[i, :], data[j, :])
-            dist[j, i] = dist[i, j]
+            similarity[i, j] = cosine_similarity(data[i, :], data[j, :])
+            similarity[j, i] = similarity[i, j]
 
-    return dist
+    return similarity
 
 
 @nb.njit(parallel=True, fastmath=True)
-def cosine_edgelist(data: np.ndarray, min_weight: float = 0.0):
+def sparse_norm(data: np.ndarray, indptr: np.ndarray):
     """
-    Compute the all-by-all cosine similarity graph directly from data.
-
-    This is faster than the approximate method, for smaller arrays
+    Computes the L2 norm for each row of a sparse 2d GCXS (i.e. CSR) array
     """
-    n = data.shape[0]
-    dist = full_cosine_similarity(data)
 
-    nc2 = n * (n - 1) // 2
-    edges = np.empty((nc2, 2), dtype=np.int32)
-    weights = np.zeros(nc2, dtype=np.float64)
+    n = indptr.shape[0] - 1
+    u_norms = np.zeros(n, dtype=np.float64)
+
+    for i in nb.prange(n):
+        p0 = indptr[i]
+        p1 = indptr[i + 1]
+
+        for j in range(p0, p1):
+            u_norms[i] += data[j] * data[j]
+
+        u_norms[i] = np.sqrt(u_norms[i])
+
+    return u_norms
+
+
+@nb.njit(parallel=True, fastmath=True)
+def full_sparse_cosine_similarity(
+    data: np.ndarray, indices: np.ndarray, indptr: np.ndarray
+):
+    """
+    Computes all-by-all cosine similarities from a sparse GCXS array, and returns the
+    dense array
+    """
+    u_norms = sparse_norm(data, indptr)
+
+    n = indptr.shape[0] - 1
+    similarity = np.eye(n, dtype=np.float64)
 
     for i in nb.prange(n - 1):
-        nic2 = (n - i) * (n - i - 1) // 2
-        for j in range(i + 1, n):
-            k = nc2 - nic2 + (j - i - 1)
-            edges[k, 0] = i
-            edges[k, 1] = j
-            weights[k] = dist[i, j]
+        if u_norms[i] == 0.0:
+            continue
 
-    ix = weights > min_weight
-    return edges[ix, :], weights[ix]
+        for j in nb.prange(i + 1, n):
+            if u_norms[j] == 0.0:
+                continue
 
+            p0 = indptr[i]
+            p1 = indptr[i + 1]
 
-@nb.njit(parallel=True, fastmath=True)
-def k_cosine_edgelist(data: np.ndarray, k: int, min_weight: float = 0.0):
-    """
-    Creates a kNN edgelist by calculating all-by-all similarities first.
-    For smaller n, this is faster than using the NNDescent algorithm,
-    at the expense of temporarily higher memory usage
-    """
-    n = data.shape[0]
-    dist = full_cosine_similarity(data)
+            q0 = indptr[j]
+            q1 = indptr[j + 1]
 
-    kng = np.zeros((n, k), dtype=np.int32)
-    knd = np.zeros((n, k), dtype=np.float64)
+            udotv = 0.0
+            for ii in range(p0, p1):
+                for jj in range(q0, q1):
+                    if indices[ii] == indices[jj]:
+                        udotv += data[ii] * data[jj]
 
-    for i in nb.prange(n):
-        edge_i = np.argsort(dist[i, :])[: -(k + 1) : -1]
-        kng[i, :] = edge_i
-        for jj, j in enumerate(edge_i):
-            knd[i, jj] = dist[i, j]
+            similarity[i, j] = udotv / (u_norms[i] * u_norms[j])
+            similarity[j, i] = similarity[i, j]
 
-    return kng_to_edgelist(kng, knd, min_weight)
+    return similarity
 
 
 @nb.njit(parallel=True, fastmath=True)
-def k_jaccard_edgelist(data: np.ndarray, k: int, min_weight: float = 0.0):
+def similarity_to_kng(sims: np.ndarray, k: int):
     """
-    Creates a Jaccard edgelist by calculating all-by-all similarities first.
-    For smaller n, this is faster than using the NNDescent algorithm,
-    at the expense of temporarily higher memory usage
+    Given an array of all-by-all similarities, returns the k-nearest-neighbor array and
+    the similarities for those edges.
+
+    *Note* that this function works with _similarities_, not _distances_
     """
-    n = data.shape[0]
-    dist = full_cosine_similarity(data)
+    n = sims.shape[0]
 
     kng = np.zeros((n, k), dtype=np.int32)
+    kns = np.zeros((n, k), dtype=np.float64)
 
     for i in nb.prange(n):
-        kng[i, :] = np.argsort(dist[i, :])[: -(k + 1) : -1]
+        kng[i, :] = np.argsort(sims[i, :])[: -(k + 1) : -1]
+        for jj, j in enumerate(kng[i, :]):
+            kns[i, jj] = sims[i, j]
 
-    return kng_to_jaccard(kng, min_weight)
+    return kng, kns
 
 
 @nb.njit(parallel=True, fastmath=True)
@@ -147,9 +186,9 @@ def compute_mutual_edges(kng: np.ndarray, knd: np.ndarray, min_weight: float = 0
     Takes the knn graph and distances from pynndescent, computes unique mutual edges
     and converts from distance to edge weight (1 - distance). Removes self-edges
     """
-    n, m = kng.shape
-    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), m), kng.flatten())).T
-    weights = np.zeros(n * m, dtype=knd.dtype)
+    n, k = kng.shape
+    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), k), kng.flatten())).T
+    weights = np.zeros(n * k, dtype=knd.dtype)
 
     for i in nb.prange(n):
         for jj, j in enumerate(kng[i, :]):
@@ -158,7 +197,7 @@ def compute_mutual_edges(kng: np.ndarray, knd: np.ndarray, min_weight: float = 0
                 continue
             for k in kng[j, :]:
                 if i == k:
-                    weights[i * m + jj] = 1 - knd[i, jj]
+                    weights[i * k + jj] = 1 - knd[i, jj]
                     break
 
     ix = weights > min_weight
@@ -171,9 +210,9 @@ def kng_to_jaccard(kng: np.ndarray, min_weight: float = 0.0):
     Takes the knn graph and computes jaccard shared-nearest-neighbor edges and weights
     for all neighbors. Removes self-edges.
     """
-    n, m = kng.shape
-    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), m), kng.flatten())).T
-    weights = np.zeros(n * m, dtype=np.float32)
+    n, k = kng.shape
+    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), k), kng.flatten())).T
+    weights = np.zeros(n * k, dtype=np.float32)
 
     for i in nb.prange(n):
         kngs = set(kng[i, :])
@@ -194,8 +233,8 @@ def kng_to_jaccard(kng: np.ndarray, min_weight: float = 0.0):
                     overlap += 1
 
             if not skip:
-                d = overlap / (2 * m - overlap)
-                weights[i * m + jj] = d
+                d = overlap / (2 * k - overlap)
+                weights[i * k + jj] = d
 
     ix = weights > min_weight
     return edges[ix, :], weights[ix]
@@ -249,13 +288,57 @@ def kng_to_full_jaccard(kng: np.ndarray, min_weight: float = 0.0):
     return edges[ix, :], weights[ix]
 
 
-def calc_graph(data: np.ndarray, n: int = 100):
+def cosine_edgelist(data: np.ndarray | sparse.GCXS, min_weight: float = 0.0):
     """
-    Compute the shared nearest neighbor graph. This means computing a kNN graph
-    and then computing the Jaccard similarity of the neighbors for each pair of
-    cells.
+    Compute the all-by-all cosine similarity graph directly from data.
 
-    `data` should be a numpy ndarray (*not* a sparse array)
+    This is faster than the approximate method, for smaller arrays
     """
-    edges, weights = k_jaccard_edgelist(data, n)
+    if isinstance(data, sparse.GCXS):
+        sims = full_sparse_cosine_similarity(data)
+    else:
+        sims = full_cosine_similarity(data)
+
+    return cosine_edgelist(sims, min_weight=min_weight)
+
+
+def k_cosine_edgelist(data: np.ndarray | sparse.GCXS, k: int, min_weight: float = 0.0):
+    """
+    Creates a kNN edgelist by calculating all-by-all similarities first.
+    For smaller n, this is faster than using the NNDescent algorithm,
+    at the expense of temporarily higher memory usage
+    """
+    if isinstance(data, sparse.GCXS):
+        sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
+    else:
+        sims = full_cosine_similarity(data)
+
+    kng, kns = similarity_to_kng(sims, k)
+
+    return kng_to_edgelist(kng, kns, min_weight)
+
+
+def k_jaccard_edgelist(data: np.ndarray | sparse.GCXS, k: int, min_weight: float = 0.0):
+    """
+    Creates a Jaccard edgelist by calculating all-by-all similarities first.
+    For smaller n, this is faster than using the NNDescent algorithm,
+    at the expense of temporarily higher memory usage
+    """
+    if isinstance(data, sparse.GCXS):
+        sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
+    else:
+        sims = full_cosine_similarity(data)
+
+    kng, _ = similarity_to_kng(sims, k)
+
+    return kng_to_jaccard(kng, min_weight)
+
+
+def calc_graph(data: np.ndarray | sparse.GCXS, k: int = 100):
+    """
+    Compute the shared nearest neighbor graph from data. This computes a kNN graph
+    and then the Jaccard similarity of the neighbors for each pair of
+    cells.
+    """
+    edges, weights = k_jaccard_edgelist(data, k)
     return ig.Graph(n=data.shape[0], edges=edges, edge_attrs={"weight": weights})
