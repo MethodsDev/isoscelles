@@ -10,6 +10,7 @@ import h5py
 import numpy as np
 import scipy.io
 import sparse
+from xarray import DataArray
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def _optional_gzip(path: str | Path, mode: str = "rt"):
         return open(path, mode)
 
 
-def read_10x_h5(path: str | Path):
+def read_10x_h5(path: str | Path) -> DataArray:
     """
     Read a 10x cellranger h5 file and return the data as a sparse GCXS array,
     along with tuples containing the barcodes and genes
@@ -40,10 +41,14 @@ def read_10x_h5(path: str | Path):
 
     matrix = sparse.GCXS((data, indices, indptr), shape=(N, M), compressed_axes=(0,))
 
-    return matrix, barcodes, genes
+    return DataArray(
+        matrix,
+        dims=["barcodes", "features"],
+        coords={"barcodes": barcodes, "features": genes},
+    )
 
 
-def read_mtx(path: str | Path):
+def read_mtx(path: str | Path) -> sparse.GCXS:
     """
     Read an mtx file and return a sparse GCXS array. Transposes the input,
     because files are usually gene x cell and we want cell x gene
@@ -54,6 +59,32 @@ def read_mtx(path: str | Path):
     return sparse.GCXS(m.T, compressed_axes=(0,))
 
 
+def read_mtx_dir(
+    path: str | Path,
+    matrix_file: str = "matrix.mtx",
+    barcode_file: str = "barcodes.tsv",
+    feature_file: str = "genes.tsv",
+) -> DataArray:
+    """
+    Reads the contents of an mtx directory, returning an xarray DataArray of the contents
+    """
+    path = Path(path)
+
+    with _optional_gzip(path / barcode_file) as fh:
+        barcodes = [line.strip() for line in fh]
+
+    with _optional_gzip(path / feature_file) as fh:
+        features = [row[0] for row in csv.reader(fh, delimiter="\t")]
+
+    matrix = read_mtx(path / matrix_file)
+
+    return DataArray(
+        matrix,
+        dims=["barcodes", "features"],
+        coords={"barcodes": barcodes, "features": features},
+    )
+
+
 def isoquant_matrix(
     isoquant_path: str | Path,
     read_to_barcode_umi: dict[str, tuple[str, str]],
@@ -61,7 +92,7 @@ def isoquant_matrix(
     valid_assignments=("unique", "unique_minor_difference"),
     barcode_list: Sequence[str] = None,
     feature_list: Sequence[tuple[str, str]] = None,
-):
+) -> DataArray:
     """
     Takes the output file from IsoQuant, along with a mapping from read name to
     barcode+umi. Returns a sparse array of UMI counts in GCXS format. The size of the
@@ -116,7 +147,11 @@ def isoquant_matrix(
         dtype=int,
     ).asformat("gcxs", compressed_axes=(0,))
 
-    return matrix, barcode_list, feature_list
+    return DataArray(
+        matrix,
+        dims=["barcodes", "features"],
+        coords={"barcodes": barcode_list, "features": feature_list},
+    )
 
 
 def isoquant_h5ad(

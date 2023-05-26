@@ -5,3 +5,4 @@ numpy
 pynndescent
 scipy
 sparse
+xarray
