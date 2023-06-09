@@ -66,7 +66,7 @@ def read_mtx_dir(
     feature_file: str = "genes.tsv",
 ) -> DataArray:
     """
-    Reads the contents of an mtx directory, returning an xarray DataArray of the contents
+    Reads the contents of an mtx directory and returns an xarray DataArray
     """
     path = Path(path)
 
