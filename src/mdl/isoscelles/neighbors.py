@@ -215,9 +215,9 @@ def kng_to_jaccard(kng: np.ndarray, min_weight: float = 0.0):
     Takes the knn graph and computes jaccard shared-nearest-neighbor edges and weights
     for all neighbors. Removes self-edges.
     """
-    n, k = kng.shape
-    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), k), kng.flatten())).T
-    weights = np.zeros(n * k, dtype=np.float32)
+    n, m = kng.shape
+    edges = np.vstack((np.repeat(np.arange(n).astype(np.int32), m), kng.flatten())).T
+    weights = np.zeros(n * m, dtype=np.float32)
 
     for i in nb.prange(n):
         kngs = set(kng[i, :])
@@ -238,8 +238,8 @@ def kng_to_jaccard(kng: np.ndarray, min_weight: float = 0.0):
                     overlap += 1
 
             if not skip:
-                d = overlap / (2 * k - overlap)
-                weights[i * k + jj] = d
+                d = overlap / (2 * m - overlap)
+                weights[i * m + jj] = d
 
     ix = weights > min_weight
     return edges[ix, :], weights[ix]
