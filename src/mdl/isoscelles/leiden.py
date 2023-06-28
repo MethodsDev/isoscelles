@@ -18,7 +18,7 @@ def leiden_sweep(
     *,
     cutoff: float = None,
     cached_arrays: dict[float, np.ndarray] = None,
-):
+) -> tuple[dict[float, np.ndarray], dict[float, Counter[int, int]]]:
     membership = None
     opt = la.Optimiser()
 
@@ -74,7 +74,7 @@ def subcluster(
     jacc_n: int = 80,
     feature_cutoff_pct: float = 0.05,
     feature_cutoff_logp: int | float = -5,
-):
+) -> tuple[dict[float, np.ndarray], dict[float, Counter[int, int]]]:
     """
     Cluster the input data over a list of different resolutions. Note that
     this code computes an exact kNN which involves an all-by-all distance
@@ -86,6 +86,10 @@ def subcluster(
         jacc_n: number of neighbors in the kNN and SNN calculations
         feature_cutoff_pct: threshold for delta between expected and observed % nonzero
         feature_cutoff_logp threshold for log p-value on expected % nonzero
+
+    Returns:
+        membership_arrays: dictionary of resolution to cluster membership
+        membership_counts: dictionary of resolution to cluster sizes
     """
     # select genes for this cell population
     is_sparse = isinstance(data, GCXS)
@@ -98,11 +102,11 @@ def subcluster(
         exp = exp.todense()
 
     # compute shared nearest-neighbor graph
-    graph = calc_graph(exp, n=jacc_n)
+    graph = calc_graph(exp, k=jacc_n)
     if len(graph.components()) > 1:
         # SNN graph has multiple distinct components, this is likely
         # too fragmented to meaningfully cluster
-        return {1: np.zeros(data.shape[0], dtype=int)}, {0: data.shape[0]}
+        return {1: np.zeros(data.shape[0], dtype=int)}, {0: Counter({0: data.shape[0]})}
 
     # perform leiden clustering over a range of resolutions
     return leiden_sweep(graph, res_list)
@@ -116,7 +120,7 @@ def recursive_cluster(
     feature_cutoff_pct: float = 0.05,
     feature_cutoff_logp: int | float = -5,
     cluster_ratio: int | float = 4,
-):
+) -> tuple[dict[tuple[int, ...], np.ndarray], dict[tuple[int, ...], float]]:
     """
     Given a complete dataset, recursively subcluster the cells until no more clusters
     can be found using the given thresholds.
@@ -129,6 +133,10 @@ def recursive_cluster(
         feature_cutoff_logp threshold for log p-value on expected % nonzero
         cluster_ratio: cutoff for calling a clustering as nontrivial. We select
                        the lowest resolution such that |c0| < cluster_ratio * |c1|
+
+    Returns:
+        clusters: mapping from level to cluster membership at that level (-1 if NA)
+        cluster_res: mapping from level to the resolution chosen for that clustering
     """
     next_level = [()]
     clusters = defaultdict(lambda: -1 * np.ones(data.shape[0], dtype=int))

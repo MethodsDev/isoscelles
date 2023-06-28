@@ -300,7 +300,9 @@ def cosine_edgelist(data: np.ndarray | sparse.GCXS, min_weight: float = 0.0):
     This is faster than the approximate method, for smaller arrays
     """
     if isinstance(data, sparse.GCXS):
-        sims = full_sparse_cosine_similarity(data)
+        if data.compressed_axes != (0,):
+            data = data.change_compressed_axes((0,))
+        sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
     else:
         sims = full_cosine_similarity(data)
 
@@ -314,6 +316,8 @@ def k_cosine_edgelist(data: np.ndarray | sparse.GCXS, k: int, min_weight: float 
     at the expense of temporarily higher memory usage
     """
     if isinstance(data, sparse.GCXS):
+        if data.compressed_axes != (0,):
+            data = data.change_compressed_axes((0,))
         sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
     else:
         sims = full_cosine_similarity(data)
@@ -339,7 +343,7 @@ def k_jaccard_edgelist(data: np.ndarray | sparse.GCXS, k: int, min_weight: float
     return kng_to_jaccard(kng, min_weight)
 
 
-def calc_graph(data: np.ndarray | sparse.GCXS, k: int = 100):
+def calc_graph(data: np.ndarray | sparse.GCXS, k: int = 80):
     """
     Compute the shared nearest neighbor graph from data. This computes a kNN graph
     and then the Jaccard similarity of the neighbors for each pair of
