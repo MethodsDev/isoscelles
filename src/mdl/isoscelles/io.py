@@ -70,10 +70,11 @@ def isoquant_matrix(
         fh.readline()
         fh.readline()
         for r in csv.DictReader(fh, delimiter="\t"):
-            if r["assignment_type"] in valid_assignments:
-                rname_to_tx[r["#read_id"]] = (r["isoform_id"], r["gene_id"])
-                bc, umi = read_to_barcode_umi[r["#read_id"]]
-                tx_umi_count[bc][(r["isoform_id"], r["gene_id"])].add(umi)
+            if r["#read_id"] in read_to_barcode_umi:
+                if r["assignment_type"] in valid_assignments:
+                    rname_to_tx[r["#read_id"]] = (r["isoform_id"], r["gene_id"])
+                    bc, umi = read_to_barcode_umi[r["#read_id"]]
+                    tx_umi_count[bc][(r["isoform_id"], r["gene_id"])].add(umi)
 
     barcode_list = sorted(tx_umi_count)
     feature_list = sorted(set(rname_to_tx.values()))
