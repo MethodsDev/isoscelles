@@ -1,3 +1,5 @@
+import csv
+from collections import defaultdict
 from pathlib import Path
 
 import h5py
@@ -37,3 +39,58 @@ def read_mtx(path: str | Path):
         m = scipy.io.mmread(fh).astype(np.int32)
 
     return sparse.GCXS(m.T, compressed_axes=(0,))
+
+
+def isoquant_matrix(
+    isoquant_path: str | Path,
+    read_to_barcode_umi: dict[str, tuple[str, str]],
+    valid_assignments=("unique", "unique_minor_difference"),
+):
+    """
+    Takes the output file from IsoQuant, along with a mapping from read name to
+    barcode+umi. Returns a sparse array of UMI counts in GCXS format.
+
+    Args:
+        isoquant_path: Path to the isoquant read_assignments.tsv file
+        read_to_barcode_umi: a mapping from read name to barcode and UMI. This can be
+            created by extracting the relevant part of the reads. Only
+            the reads in this mapping (and thus the barcodes) will be
+            used to create the output array
+        valid_assignments: isoquant assignments that should be counted. See the isoquant
+            documentation for more information
+
+    Returns:
+        The sparse count array, along with the barcodes and features in the same order
+    """
+    valid_assignments = set(valid_assignments)
+
+    rname_to_tx = dict()
+    tx_umi_count = defaultdict(lambda: defaultdict(set))
+
+    with open(isoquant_path) as fh:
+        fh.readline()
+        fh.readline()
+        for r in csv.DictReader(fh, delimiter="\t"):
+            if r["assignment_type"] in valid_assignments:
+                rname_to_tx[r["#read_id"]] = (r["isoform_id"], r["gene_id"])
+                bc, umi = read_to_barcode_umi[r["#read_id"]]
+                tx_umi_count[bc][(r["isoform_id"], r["gene_id"])].add(umi)
+
+    barcode_list = sorted(tx_umi_count)
+    feature_list = sorted(set(rname_to_tx.values()))
+
+    barcode_index = {bc: i for i, bc in enumerate(barcode_list)}
+    feature_index = {tx: i for i, tx in enumerate(feature_list)}
+
+    matrix = sparse.COO.from_iter(
+        (
+            ((barcode_index[bc], feature_index[tx]), len(tx_umi_count[bc][tx]))
+            for bc in tx_umi_count
+            for tx in tx_umi_count[bc]
+        ),
+        shape=(len(barcode_list), len(feature_list)),
+        fill_value=0,
+        dtype=int,
+    ).asformat("gcxs", compressed_axes=(0,))
+
+    return matrix, barcode_list, feature_list
