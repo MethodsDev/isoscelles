@@ -53,9 +53,8 @@ def isoquant_matrix(
     Args:
         isoquant_path: Path to the isoquant read_assignments.tsv file
         read_to_barcode_umi: a mapping from read name to barcode and UMI. This can be
-            created by extracting the relevant part of the reads. Only
-            the reads in this mapping (and thus the barcodes) will be
-            used to create the output array
+            created by extracting the relevant part of the reads. Only the reads in this
+            mapping (and thus the barcodes) will be used to create the output array
         valid_assignments: isoquant assignments that should be counted. See the isoquant
             documentation for more information
 
