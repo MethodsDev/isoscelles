@@ -1,6 +1,7 @@
 import csv
 from collections import defaultdict
 from pathlib import Path
+from typing import Sequence
 
 import h5py
 import numpy as np
@@ -46,25 +47,25 @@ def isoquant_matrix(
     read_to_barcode_umi: dict[str, tuple[str, str]],
     *,
     valid_assignments=("unique", "unique_minor_difference"),
-    barcode_index: dict[str, int] = None,
-    feature_index: dict[tuple[str, str], int] = None,
+    barcode_list: Sequence[int] = None,
+    feature_list: Sequence[tuple[str, str]] = None,
 ):
     """
     Takes the output file from IsoQuant, along with a mapping from read name to
     barcode+umi. Returns a sparse array of UMI counts in GCXS format. The size of the
-    array will depend on the size of the index dictionaries, if they are provided
+    array depends on the size of the barcode and feature lists, if they are provided
 
     Args:
         isoquant_path: Path to the isoquant read_assignments.tsv file
-        read_to_barcode_umi: a mapping from read name to barcode and UMI. This can be
+        read_to_barcode_umi: a mapping from read name to (barcode, UMI). This can be
             created by extracting the relevant part of the reads. Only the reads in this
-            mapping (and thus the barcodes) will be used to create the output array
+            mapping (and thus the barcodes) will be included in the output array
         valid_assignments: isoquant assignments that should be counted. See the isoquant
             documentation for more information
-        barcode_index (optional): mapping from barcode to row index, if a specific
-            ordering is desired. If None, will sort the barcodes present
-        feature_index (optional): mapping from (isoform_id, gene_id) to column index,
-            if a specific ordering is desired. If None, will sort the features present
+        barcode_list: sequence of barcodes, if a specific ordering is desired. If None,
+            will sort the barcodes seen
+        feature_list: sequence of (isoform_id, gene_id) features, if a specific ordering
+            is desired. If None, will sort the features seen
 
     Returns:
         The sparse count array, along with the barcodes and features in the same order
@@ -84,17 +85,15 @@ def isoquant_matrix(
                     bc, umi = read_to_barcode_umi[r["#read_id"]]
                     tx_umi_count[bc][(r["isoform_id"], r["gene_id"])].add(umi)
 
-    if barcode_index is not None:
-        barcode_list = sorted(barcode_index, key=barcode_index.get)
-    else:
+    if barcode_list is None:
         barcode_list = sorted(tx_umi_count)
-        barcode_index = {bc: i for i, bc in enumerate(barcode_list)}
 
-    if feature_index is not None:
-        feature_list = sorted(feature_index, key=feature_index.get)
-    else:
+    barcode_index = {bc: i for i, bc in enumerate(barcode_list)}
+
+    if feature_list is None:
         feature_list = sorted(set(rname_to_tx.values()))
-        feature_index = {tx: i for i, tx in enumerate(feature_list)}
+
+    feature_index = {tx: i for i, tx in enumerate(feature_list)}
 
     matrix = sparse.COO.from_iter(
         (
