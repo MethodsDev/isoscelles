@@ -44,16 +44,16 @@ def isoquant_matrix(
             by new outputs
         out_h5ad: Path to h5ad file
         gene_Ensembl_to_name: a tsv file with first column contaning Ensembl ID and second column containing gene name
-    
+
     Opututs:
         A isoforms_seurat folder containing: the sparse count matrix, barcodes and features
             -cellranger and spaceranger standard output like format
         A isoforms_h5ad folder containing h5ad file that can be used for scanpy downstream analysis
-    
+
     """
     valid_assignments = set(valid_assignments)
-    
-    samfile = pysam.AlignmentFile(bam_path, "rb")
+
+    samfile = pysam.AlignmentFile(bam_path, "rb", check_sq = False)
     read_to_barcode_umi = {}
     for read in samfile:
         read_to_barcode_umi.update({read.query_name:(read.get_tag("CB"),read.get_tag("XM"))})
@@ -93,26 +93,26 @@ def isoquant_matrix(
 
     matrix = pd.DataFrame.sparse.from_spmatrix(matrix)
     matrix.astype(pd.SparseDtype("float"))
-    
+
     if os.path.exists(out_isoform_seurat_path):
         shutil.rmtree(out_isoform_seurat_path)
     os.mkdir(out_isoform_seurat_path)
-    
+
     with gzip.open(out_isoform_seurat_path + "/matrix.mtx.gz", 'wb') as f:
         scipy.io.mmwrite(f, scipy.sparse.coo_matrix(matrix))
-    
+
     pd.DataFrame(barcode_list).to_csv(out_isoform_seurat_path + "/barcodes.tsv.gz", sep="\t",header=False,index=False, compression='gzip')
-    
+
     Ensembl = list(pd.read_csv(gene_Ensembl_to_name, sep='\t', header = None)[0])
     name = list(pd.read_csv(gene_Ensembl_to_name, sep='\t', header = None)[1])
     feature_Ensembl = list(pd.DataFrame(feature_list)[1])
     Enzembl_to_name = {Ensembl[i]: name[i] for i in range(len(Ensembl))}
     feature_list_pd = pd.DataFrame(feature_list)
-    feature_list_pd[2] = feature_list_pd[1] 
-    feature_list_pd[3] = [Enzembl_to_name[feature_Ensembl[i]] for i in range(len(feature_Ensembl))]
-    feature_list_pd[1] = feature_list_pd[0] + ":" + feature_list_pd[3]
+    gene_ids = feature_list_pd[1]
+    feature_list_pd[1] = feature_list_pd[0] + ":" + [Enzembl_to_name[feature_Ensembl[i]] for i in range(len(feature_Ensembl))]
     feature_list_pd = feature_list_pd[[0,1]]
     feature_list_pd[2] = "Gene Expression"
+    feature_list_pd[0] = gene_ids
     feature_list_pd.to_csv(out_isoform_seurat_path + "/features.tsv.gz", sep="\t",header=False, index=False, compression='gzip')
 
     if os.path.exists(out_h5ad_path):
