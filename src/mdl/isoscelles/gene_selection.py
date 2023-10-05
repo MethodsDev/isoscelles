@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 
 # blockwise poisson fit of gene counts
-def fit_poission(
+def fit_poisson(
     counts: np.ndarray | sparse.GCXS,
     numis: np.ndarray = None,
     blocksize: int = 128_000,

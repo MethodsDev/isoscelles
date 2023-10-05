@@ -6,7 +6,7 @@ import leidenalg as la
 import numpy as np
 from sparse import GCXS
 
-from .gene_selection import fit_poission
+from .gene_selection import fit_poisson
 from .neighbors import calc_graph
 
 log = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ def subcluster(
     """
     # select genes for this cell population
     is_sparse = isinstance(data, GCXS)
-    exp_nz, pct, exp_p = fit_poission(data, sparse=is_sparse)
+    exp_nz, pct, exp_p = fit_poisson(data, sparse=is_sparse)
     selected_feat = ((exp_nz - pct) > feature_cutoff_pct) & (
         exp_p < feature_cutoff_logp
     )
