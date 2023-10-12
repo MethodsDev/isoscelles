@@ -9,13 +9,12 @@ log = logging.getLogger(__name__)
 
 # blockwise poisson fit of gene counts
 def fit_poisson(
-    counts: np.ndarray | sparse.GCXS,
-    numis: np.ndarray = None,
-    blocksize: int = 128_000,
-    sparse: bool = False,
+    counts: np.ndarray | sparse.GCXS, numis: np.ndarray = None, blocksize: int = 128_000
 ):
+    is_sparse = isinstance(counts, sparse.GCXS)
+
     def if_sparse(X):
-        if sparse:
+        if is_sparse:
             return X.todense()
         return X
 
