@@ -1,5 +1,6 @@
 import csv
 import gzip
+import logging
 from collections import defaultdict
 from itertools import islice
 from pathlib import Path
@@ -9,6 +10,8 @@ import h5py
 import numpy as np
 import scipy.io
 import sparse
+
+log = logging.getLogger(__name__)
 
 
 def _optional_gzip(path: str | Path, mode: str = "rt"):
@@ -114,3 +117,57 @@ def isoquant_matrix(
     ).asformat("gcxs", compressed_axes=(0,))
 
     return matrix, barcode_list, feature_list
+
+
+def isoquant_h5ad(
+    matrix: sparse.GCXS,
+    barcode_list: Sequence[str],
+    feature_list: Sequence[tuple[str, str]],
+    output_path: str | Path,
+):
+    try:
+        import anndata as ad
+    except ImportError:
+        log.error("Could not import anndata, please make sure it is installed")
+        return None
+
+    try:
+        import pandas as pd
+    except ImportError:
+        log.error("Could not import pandas, required to create h5ad")
+        return None
+
+    isoform_list, gene_list, *_ = zip(*feature_list)
+
+    anndata = ad.AnnData(
+        matrix.to_scipy_sparse(),
+        obs=pd.DataFrame(index=barcode_list),
+        var=pd.DataFrame(index=isoform_list, data={"gene": gene_list}),
+    )
+
+    anndata.write_h5ad(output_path)
+
+    return anndata
+
+
+def isoquant_mtx(
+    matrix: sparse.GCXS,
+    barcode_list: Sequence[str],
+    feature_list: Sequence[tuple[str, str]],
+    output_path: str | Path,
+):
+    output_path = Path(output_path)
+    if not output_path.exists():
+        output_path.mkdir()
+    elif not output_path.isdir():
+        raise ValueError(f"{output_path} must be a directory")
+
+    matrix = matrix.to_scipy_sparse()
+    with gzip.open(output_path / "matrix.mtx.gz", "wb") as out:
+        scipy.io.mmwrite(out, matrix)
+
+    with gzip.open(output_path / "barcodes.tsv.gz", "wt") as out:
+        print("\n".join(barcode_list), file=out)
+
+    with gzip.open(output_path / "features.tsv.gz", "wt") as out:
+        print("\n".join("\t".join(ft) for ft in feature_list), file=out)
