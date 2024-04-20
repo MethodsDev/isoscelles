@@ -8,7 +8,8 @@ def tiecorrect(rankvals: np.ndarray):
     """
     parallelized version of scipy.stats.tiecorrect
 
-    :param rankvals: p x n array of ranked data (output of rankdata function)
+    Args:
+        rankvals: p x n array of ranked data (output of rankdata function)
     """
     tc = np.ones(rankvals.shape[1], dtype=np.float64)
     for j in nb.prange(rankvals.shape[1]):
@@ -30,7 +31,8 @@ def rankdata(data: np.ndarray):
     """
     parallelized version of scipy.stats.rankdata
 
-    :param data: p x n array of data to rank, column-wise
+    Args:
+        data: p x n array of data to rank, column-wise
     """
     ranked = np.empty(data.shape, dtype=np.float64)
     for j in nb.prange(data.shape[1]):
