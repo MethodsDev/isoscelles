@@ -6,7 +6,7 @@ import leidenalg as la
 import numpy as np
 from sparse import GCXS
 
-from .gene_selection import fit_poission
+from .gene_selection import fit_poisson
 from .neighbors import calc_graph
 
 log = logging.getLogger(__name__)
@@ -53,14 +53,14 @@ def leiden_sweep(
             continue
 
         if cutoff is not None and c0c1_ratio < cutoff:
-            log.info(
+            log.debug(
                 f"Reached nontrivial clustering with c0/c1 ratio {c0c1_ratio:.1f},"
                 " stopping"
             )
             break
     else:
         if cutoff is not None:
-            log.info(
+            log.debug(
                 f"Finished resolution list without reaching c0/c1 ratio of {cutoff}"
             )
 
@@ -93,19 +93,20 @@ def subcluster(
     """
     # select genes for this cell population
     is_sparse = isinstance(data, GCXS)
-    exp_nz, pct, exp_p = fit_poission(data, sparse=is_sparse)
+    exp_nz, pct, exp_p = fit_poisson(data)
     selected_feat = ((exp_nz - pct) > feature_cutoff_pct) & (
         exp_p < feature_cutoff_logp
     )
     exp = np.sqrt(data[:, selected_feat])
     if is_sparse:
-        exp = exp.todense()
+        exp = exp.asformat("gcxs", compressed_axes=(0,))
 
     # compute shared nearest-neighbor graph
     graph = calc_graph(exp, k=jacc_n)
     if len(graph.components()) > 1:
         # SNN graph has multiple distinct components, this is likely
         # too fragmented to meaningfully cluster
+        log.debug(f"Found {len(graph.components())} components")
         return {1: np.zeros(data.shape[0], dtype=int)}, {0: Counter({0: data.shape[0]})}
 
     # perform leiden clustering over a range of resolutions

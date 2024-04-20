@@ -293,18 +293,26 @@ def kng_to_full_jaccard(kng: np.ndarray, min_weight: float = 0.0):
     return edges[ix, :], weights[ix]
 
 
+def _cosine_similarity(data: np.ndarray | sparse.GCXS):
+    """
+    Helper function for computing full cosine similarity which handles sparse arrays
+    and makes sure the compressed axes is correct.
+    """
+    if isinstance(data, sparse.GCXS):
+        if data.compressed_axes != (0,):
+            data = data.change_compressed_axes((0,))
+        return full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
+    else:
+        return full_cosine_similarity(data)
+
+
 def cosine_edgelist(data: np.ndarray | sparse.GCXS, min_weight: float = 0.0):
     """
     Compute the all-by-all cosine similarity graph directly from data.
 
     This is faster than the approximate method, for smaller arrays
     """
-    if isinstance(data, sparse.GCXS):
-        if data.compressed_axes != (0,):
-            data = data.change_compressed_axes((0,))
-        sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
-    else:
-        sims = full_cosine_similarity(data)
+    sims = _cosine_similarity(data)
 
     return cosine_edgelist(sims, min_weight=min_weight)
 
@@ -315,13 +323,7 @@ def k_cosine_edgelist(data: np.ndarray | sparse.GCXS, k: int, min_weight: float 
     For smaller n, this is faster than using the NNDescent algorithm,
     at the expense of temporarily higher memory usage
     """
-    if isinstance(data, sparse.GCXS):
-        if data.compressed_axes != (0,):
-            data = data.change_compressed_axes((0,))
-        sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
-    else:
-        sims = full_cosine_similarity(data)
-
+    sims = _cosine_similarity(data)
     kng, kns = similarity_to_kng(sims, k)
 
     return kng_to_edgelist(kng, kns, min_weight)
@@ -333,11 +335,7 @@ def k_jaccard_edgelist(data: np.ndarray | sparse.GCXS, k: int, min_weight: float
     For smaller n, this is faster than using the NNDescent algorithm,
     at the expense of temporarily higher memory usage.
     """
-    if isinstance(data, sparse.GCXS):
-        sims = full_sparse_cosine_similarity(data.data, data.indices, data.indptr)
-    else:
-        sims = full_cosine_similarity(data)
-
+    sims = _cosine_similarity(data)
     kng, _ = similarity_to_kng(sims, k)
 
     return kng_to_jaccard(kng, min_weight)

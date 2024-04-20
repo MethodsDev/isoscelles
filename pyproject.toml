@@ -15,16 +15,17 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
-dynamic = ["dependencies", "optional-dependencies", "version"]
+optional-dependencies = { dev = ["pre-commit", "ruff"] }
+dynamic = ["dependencies", "version"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = "requirements.txt"}
-optional-dependencies = {dev = {file = "dev-requirements.txt"}}
 version = {attr = "mdl.isoscelles.__version__"}
 
 [tool.ruff]
 src = ["src"]
 select = ["E", "F", "I", "A"]
+ignore = ["E501"]

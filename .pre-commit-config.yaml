@@ -12,12 +12,9 @@ repos:
         types: [python]
       - id: check-toml
       - id: check-merge-conflict
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: 'v0.0.256'
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 'v0.1.2'
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
-  - repo: https://github.com/psf/black
-    rev: 22.10.0
-    hooks:
-      - id: black
+      - id: ruff-format

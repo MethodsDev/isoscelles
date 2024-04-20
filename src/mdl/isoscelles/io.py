@@ -2,6 +2,7 @@ import csv
 import gzip
 import logging
 from collections import defaultdict
+from itertools import islice
 from pathlib import Path
 from typing import Sequence
 
@@ -13,7 +14,14 @@ import sparse
 log = logging.getLogger(__name__)
 
 
-def read_10x_h5(path: str):
+def _optional_gzip(path: str | Path, mode: str = "rt"):
+    if Path(path).suffix == ".gz":
+        return gzip.open(path, mode)
+    else:
+        return open(path, mode)
+
+
+def read_10x_h5(path: str | Path):
     """
     Read a 10x cellranger h5 file and return the data as a sparse GCXS array,
     along with tuples containing the barcodes and genes
@@ -40,7 +48,7 @@ def read_mtx(path: str | Path):
     Read an mtx file and return a sparse GCXS array. Transposes the input,
     because files are usually gene x cell and we want cell x gene
     """
-    with open(path, "rb") as fh:
+    with _optional_gzip(path, "rb") as fh:
         m = scipy.io.mmread(fh).astype(np.int32)
 
     return sparse.GCXS(m.T, compressed_axes=(0,))
@@ -60,7 +68,7 @@ def isoquant_matrix(
     array depends on the size of the barcode and feature lists, if they are provided
 
     Args:
-        isoquant_path: Path to the isoquant read_assignments.tsv file
+        isoquant_path: Path to the isoquant read_assignments.tsv[.gz] file
         read_to_barcode_umi: a mapping from read name to (barcode, UMI). This can be
             created by extracting the relevant part of the reads. Only the reads in this
             mapping (and thus the barcodes) will be included in the output array
@@ -79,10 +87,8 @@ def isoquant_matrix(
     rname_to_tx = dict()
     tx_umi_count = defaultdict(lambda: defaultdict(set))
 
-    with open(isoquant_path) as fh:
-        fh.readline()
-        fh.readline()
-        for r in csv.DictReader(fh, delimiter="\t"):
+    with _optional_gzip(isoquant_path) as fh:
+        for r in csv.DictReader(islice(fh, 2, None), delimiter="\t"):
             if r["#read_id"] in read_to_barcode_umi:
                 if r["assignment_type"] in valid_assignments:
                     rname_to_tx[r["#read_id"]] = (r["isoform_id"], r["gene_id"])
