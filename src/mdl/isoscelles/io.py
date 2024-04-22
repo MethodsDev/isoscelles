@@ -31,7 +31,7 @@ def read_10x_h5(path: str | Path):
         gene_names = tuple(fh["matrix"]["features"]["name"].asstr())
         gene_ids = tuple(fh["matrix"]["features"]["id"].asstr())
 
-        genes = tuple(zip(gene_names, gene_ids))
+        features = tuple(zip(gene_names, gene_ids))
         barcodes = tuple(fh["matrix"]["barcodes"].asstr())
 
         data = np.asarray(fh["matrix"]["data"])
@@ -40,18 +40,44 @@ def read_10x_h5(path: str | Path):
 
     matrix = sparse.GCXS((data, indices, indptr), shape=(N, M), compressed_axes=(0,))
 
-    return matrix, barcodes, genes
+    return matrix, barcodes, features
 
 
-def read_mtx(path: str | Path):
+def read_mtx(path: str | Path, transpose: bool = True):
     """
-    Read an mtx file and return a sparse GCXS array. Transposes the input,
-    because files are usually gene x cell and we want cell x gene
+    Read an mtx file and return a sparse GCXS array. Transposes the input by default,
+    because these files are usually gene x cell and we want cell x gene
     """
     with _optional_gzip(path, "rb") as fh:
         m = scipy.io.mmread(fh).astype(np.int32)
 
-    return sparse.GCXS(m.T, compressed_axes=(0,))
+    if transpose:
+        return sparse.GCXS(m.T, compressed_axes=(0,))
+    else:
+        return sparse.GCXS(m, compressed_axes=(0,))
+
+
+def read_mtx_dir(
+    path: str | Path,
+    matrix_file: str = "matrix.mtx",
+    barcode_file: str = "barcodes.tsv",
+    feature_file: str = "genes.tsv",
+):
+    """
+    Reads the contents of an mtx directory and returns as sparse GCXS array, a list of
+    barcodes, and a list of features
+    """
+    path = Path(path)
+
+    with _optional_gzip(path / barcode_file) as fh:
+        barcodes = [line.strip() for line in fh]
+
+    with _optional_gzip(path / feature_file) as fh:
+        features = [row[0] for row in csv.reader(fh, delimiter="\t")]
+
+    matrix = read_mtx(path / matrix_file)
+
+    return matrix, barcodes, features
 
 
 def isoquant_matrix(
@@ -119,12 +145,15 @@ def isoquant_matrix(
     return matrix, barcode_list, feature_list
 
 
-def isoquant_h5ad(
+def to_anndata(
     matrix: sparse.GCXS,
     barcode_list: Sequence[str],
     feature_list: Sequence[tuple[str, str]],
-    output_path: str | Path,
 ):
+    """
+    Create an AnnData object out of a sparse array, barcode list and feature list. This
+    function assumes the feature list consists of tuples of (isoform_id, gene_id).
+    """
     try:
         import anndata as ad
     except ImportError:
@@ -139,23 +168,22 @@ def isoquant_h5ad(
 
     isoform_list, gene_list, *_ = zip(*feature_list)
 
-    anndata = ad.AnnData(
+    return ad.AnnData(
         matrix.to_scipy_sparse(),
         obs=pd.DataFrame(index=barcode_list),
         var=pd.DataFrame(index=isoform_list, data={"gene": gene_list}),
     )
 
-    anndata.write_h5ad(output_path)
 
-    return anndata
-
-
-def isoquant_mtx(
+def write_mtx(
     matrix: sparse.GCXS,
     barcode_list: Sequence[str],
     feature_list: Sequence[tuple[str, str]],
     output_path: str | Path,
 ):
+    """
+    Write a matrix, barcode list and feature list to disk in the standard mtx format
+    """
     output_path = Path(output_path)
     if not output_path.exists():
         output_path.mkdir()
