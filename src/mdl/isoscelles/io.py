@@ -15,6 +15,9 @@ from xarray import DataArray
 log = logging.getLogger(__name__)
 
 
+DataTuple = tuple[sparse.GCXS, Sequence[str], Sequence[tuple[str, str]]]
+
+
 def _optional_gzip(path: str | Path, mode: str = "rt"):
     if Path(path).suffix == ".gz":
         return gzip.open(path, mode)
@@ -22,7 +25,7 @@ def _optional_gzip(path: str | Path, mode: str = "rt"):
         return open(path, mode)
 
 
-def read_10x_h5(path: str | Path) -> DataArray:
+def read_10x_h5(path: str | Path) -> DataTuple:
     """
     Read a 10x cellranger h5 file and return the data as a sparse GCXS array,
     along with tuples containing the barcodes and genes
@@ -32,7 +35,7 @@ def read_10x_h5(path: str | Path) -> DataArray:
         gene_names = tuple(fh["matrix"]["features"]["name"].asstr())
         gene_ids = tuple(fh["matrix"]["features"]["id"].asstr())
 
-        genes = tuple(zip(gene_names, gene_ids))
+        features = tuple(zip(gene_names, gene_ids))
         barcodes = tuple(fh["matrix"]["barcodes"].asstr())
 
         data = np.asarray(fh["matrix"]["data"])
@@ -41,22 +44,21 @@ def read_10x_h5(path: str | Path) -> DataArray:
 
     matrix = sparse.GCXS((data, indices, indptr), shape=(N, M), compressed_axes=(0,))
 
-    return DataArray(
-        matrix,
-        dims=["barcodes", "features"],
-        coords={"barcodes": barcodes, "features": genes},
-    )
+    return matrix, barcodes, features
 
 
-def read_mtx(path: str | Path) -> sparse.GCXS:
+def read_mtx(path: str | Path, transpose: bool = True) -> sparse.GCXS:
     """
-    Read an mtx file and return a sparse GCXS array. Transposes the input,
-    because files are usually gene x cell and we want cell x gene
+    Read an mtx file and return a sparse GCXS array. Transposes the input by default,
+    because most mtx files are gene x cell and we want cell x gene
     """
     with _optional_gzip(path, "rb") as fh:
         m = scipy.io.mmread(fh).astype(np.int32)
 
-    return sparse.GCXS(m.T, compressed_axes=(0,))
+    if transpose:
+        return sparse.GCXS(m.T, compressed_axes=(0,))
+    else:
+        return sparse.GCXS(m, compressed_axes=(0,))
 
 
 def read_mtx_dir(
@@ -64,7 +66,7 @@ def read_mtx_dir(
     matrix_file: str = "matrix.mtx",
     barcode_file: str = "barcodes.tsv",
     feature_file: str = "genes.tsv",
-) -> DataArray:
+) -> DataTuple:
     """
     Reads the contents of an mtx directory and returns an xarray DataArray
     """
@@ -78,11 +80,7 @@ def read_mtx_dir(
 
     matrix = read_mtx(path / matrix_file)
 
-    return DataArray(
-        matrix,
-        dims=["barcodes", "features"],
-        coords={"barcodes": barcodes, "features": features},
-    )
+    return matrix, barcodes, features
 
 
 def isoquant_matrix(
@@ -92,7 +90,7 @@ def isoquant_matrix(
     valid_assignments=("unique", "unique_minor_difference"),
     barcode_list: Sequence[str] = None,
     feature_list: Sequence[tuple[str, str]] = None,
-) -> DataArray:
+) -> DataTuple:
     """
     Takes the output file from IsoQuant, along with a mapping from read name to
     barcode+umi. Returns a sparse array of UMI counts in GCXS format. The size of the
@@ -147,6 +145,14 @@ def isoquant_matrix(
         dtype=int,
     ).asformat("gcxs", compressed_axes=(0,))
 
+    return matrix, barcode_list, feature_list
+
+
+def to_data_array(
+    matrix: sparse.GCXS,
+    barcode_list: Sequence[str],
+    feature_list: Sequence[tuple[str, str]],
+) -> DataArray:
     return DataArray(
         matrix,
         dims=["barcodes", "features"],
@@ -154,11 +160,10 @@ def isoquant_matrix(
     )
 
 
-def isoquant_h5ad(
+def to_anndata(
     matrix: sparse.GCXS,
     barcode_list: Sequence[str],
     feature_list: Sequence[tuple[str, str]],
-    output_path: str | Path,
 ):
     try:
         import anndata as ad
@@ -174,18 +179,14 @@ def isoquant_h5ad(
 
     isoform_list, gene_list, *_ = zip(*feature_list)
 
-    anndata = ad.AnnData(
+    return ad.AnnData(
         matrix.to_scipy_sparse(),
         obs=pd.DataFrame(index=barcode_list),
         var=pd.DataFrame(index=isoform_list, data={"gene": gene_list}),
     )
 
-    anndata.write_h5ad(output_path)
 
-    return anndata
-
-
-def isoquant_mtx(
+def write_mtx(
     matrix: sparse.GCXS,
     barcode_list: Sequence[str],
     feature_list: Sequence[tuple[str, str]],
