@@ -4,7 +4,7 @@ import logging
 from collections import defaultdict
 from itertools import islice
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, TextIO
 
 import h5py
 import numpy as np
@@ -13,18 +13,27 @@ import sparse
 
 log = logging.getLogger(__name__)
 
+BarcodeFeatureTuple = tuple[sparse.GCXS, Sequence[str], Sequence[tuple[str, str]]]
 
-def _optional_gzip(path: str | Path, mode: str = "rt"):
+
+def _optional_gzip(path: str | Path, mode: str = "rt") -> TextIO:
     if Path(path).suffix == ".gz":
         return gzip.open(path, mode)
     else:
         return open(path, mode)
 
 
-def read_10x_h5(path: str | Path):
+def read_10x_h5(path: str | Path) -> BarcodeFeatureTuple:
     """
     Read a 10x cellranger h5 file and return the data as a sparse GCXS array,
     along with tuples containing the barcodes and genes
+
+    Args:
+        path: the path to 10x-formatted hdf5 file
+
+    Returns:
+        The sparse count array, along with the barcodes and features
+
     """
     with h5py.File(path, "r") as fh:
         M, N = fh["matrix"]["shape"]
@@ -43,10 +52,17 @@ def read_10x_h5(path: str | Path):
     return matrix, barcodes, features
 
 
-def read_mtx(path: str | Path, transpose: bool = True):
+def read_mtx(path: str | Path, transpose: bool = True) -> sparse.GCXS:
     """
     Read an mtx file and return a sparse GCXS array. Transposes the input by default,
     because these files are usually gene x cell and we want cell x gene
+
+    Args:
+        path: path to an mtx-formatted count file, optionally gzipped
+        transpose: whether to transpose the input matrix
+
+    Returns:
+        The sparse count array
     """
     with _optional_gzip(path, "rb") as fh:
         m = scipy.io.mmread(fh).astype(np.int32)
@@ -87,7 +103,7 @@ def isoquant_matrix(
     valid_assignments=("unique", "unique_minor_difference"),
     barcode_list: Sequence[str] = None,
     feature_list: Sequence[tuple[str, str]] = None,
-):
+) -> BarcodeFeatureTuple:
     """
     Takes the output file from IsoQuant, along with a mapping from read name to
     barcode+umi. Returns a sparse array of UMI counts in GCXS format. The size of the
@@ -153,6 +169,14 @@ def to_anndata(
     """
     Create an AnnData object out of a sparse array, barcode list and feature list. This
     function assumes the feature list consists of tuples of (isoform_id, gene_id).
+
+    Args:
+        matrix: a sparse count matrix of size `n_observations` x `n_vars`
+        barcode_list: a sequence of `n_observations` barcodes
+        feature_list: a sequence of `n_vars` features
+
+    Returns:
+        an anndata.AnnData object representing the same data
     """
     try:
         import anndata as ad
@@ -182,7 +206,14 @@ def write_mtx(
     output_path: str | Path,
 ):
     """
-    Write a matrix, barcode list and feature list to disk in the standard mtx format
+    Write a matrix, barcode list and feature list to disk in the standard mtx format.
+    Files will be written gzipped as matrix.mtx.gz, barcodes.tsv.gz, and features.tsv.gz
+
+    Args:
+        matrix: a sparse count matrix of size `n_observations` x `n_vars`
+        barcode_list: a sequence of `n_observations` barcodes
+        feature_list: a sequence of `n_vars` features
+        output_path: where to write the three files
     """
     output_path = Path(output_path)
     if not output_path.exists():

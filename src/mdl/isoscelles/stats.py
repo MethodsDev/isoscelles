@@ -4,11 +4,15 @@ import scipy.stats
 
 
 @nb.njit(parallel=True)
-def tiecorrect(rankvals: np.ndarray):
+def tiecorrect(rankvals: np.ndarray) -> np.ndarray:
     """
     parallelized version of scipy.stats.tiecorrect
 
-    :param rankvals: p x n array of ranked data (output of rankdata function)
+    Args:
+        rankvals: p x n array of ranked data (output of rankdata function)
+
+    Returns:
+        array of n tie-correction factors
     """
     tc = np.ones(rankvals.shape[1], dtype=np.float64)
     for j in nb.prange(rankvals.shape[1]):
@@ -26,11 +30,15 @@ def tiecorrect(rankvals: np.ndarray):
 
 
 @nb.njit(parallel=True)
-def rankdata(data: np.ndarray):
+def rankdata(data: np.ndarray) -> np.ndarray:
     """
     parallelized version of scipy.stats.rankdata
 
-    :param data: p x n array of data to rank, column-wise
+    Args:
+        data: p x n array of data to rank, column-wise
+
+    Returns:
+        ranked: p x n array of rank values for each column of data, adjusted for ties
     """
     ranked = np.empty(data.shape, dtype=np.float64)
     for j in nb.prange(data.shape[1]):
@@ -50,15 +58,24 @@ def rankdata(data: np.ndarray):
     return ranked
 
 
-def spearmanr(x: np.ndarray):
+def spearmanr(x: np.ndarray) -> tuple[np.ndarray[float], np.ndarray[float]]:
     """
     Version of Spearman correlation that runs in parallel on a 2d array. Based
     on scipy.stats.spearmanr, with some simplifications
 
     This computes all-by-all correlation and returns the arrays of r values
     and log p-values, using a two-sided test.
+
+    Args:
+        x: 2-d array array of n_observations x n_variables
+
+    Returns:
+        r: array of size n_variables x n_variables containing the r coefficient for
+           each pairwise comparison
+        logp: array of size n_variables x n_variables containing the log(p-value) for
+              each pairwise comparison
     """
-    n_obs, n_vars = x.shape
+    n_obs, _ = x.shape
     a_ranked = rankdata(x)  # this is parallelized
 
     r = np.corrcoef(a_ranked, rowvar=False)
@@ -75,11 +92,22 @@ def spearmanr(x: np.ndarray):
     return r, logp
 
 
-def mannwhitneyu(x: np.ndarray, y: np.ndarray, use_continuity: bool = True):
+def mannwhitneyu(
+    x: np.ndarray, y: np.ndarray, use_continuity: bool = True
+) -> tuple[np.ndarray[float], np.ndarray[float]]:
     """
     Version of Mann-Whitney U-test that runs in parallel on 2d arrays
 
     This is the two-sided test, asymptotic algo only. Returns log p-values
+
+    Args:
+        x, y: 2-d arrays of samples. Arrays must have the same number of columns, which
+              are the features compared by the test.
+        use_continuity: Whether a continuity correction (1/2) should be applied.
+
+    Returns:
+        u: an array of U values for the tests. Excluded features have value 0
+        logp: log(p-value) for each feature. Excluded features are set to 0
     """
     x = np.asarray(x)
     y = np.asarray(y)
