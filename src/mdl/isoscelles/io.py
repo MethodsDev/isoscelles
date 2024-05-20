@@ -169,6 +169,14 @@ def to_anndata(
     """
     Create an AnnData object out of a sparse array, barcode list and feature list. This
     function assumes the feature list consists of tuples of (isoform_id, gene_id).
+
+    Args:
+        matrix: a sparse count matrix of size `n_observations` x `n_vars`
+        barcode_list: a sequence of `n_observations` barcodes
+        feature_list: a sequence of `n_vars` features
+
+    Returns:
+        an anndata.AnnData object representing the same data
     """
     try:
         import anndata as ad
@@ -198,7 +206,14 @@ def write_mtx(
     output_path: str | Path,
 ):
     """
-    Write a matrix, barcode list and feature list to disk in the standard mtx format
+    Write a matrix, barcode list and feature list to disk in the standard mtx format.
+    Files will be written gzipped as matrix.mtx.gz, barcodes.tsv.gz, and features.tsv.gz
+
+    Args:
+        matrix: a sparse count matrix of size `n_observations` x `n_vars`
+        barcode_list: a sequence of `n_observations` barcodes
+        feature_list: a sequence of `n_vars` features
+        output_path: where to write the three files
     """
     output_path = Path(output_path)
     if not output_path.exists():
