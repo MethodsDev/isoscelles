@@ -92,7 +92,9 @@ def spearmanr(x: np.ndarray) -> tuple[np.ndarray[float], np.ndarray[float]]:
     return r, logp
 
 
-def mannwhitneyu(x: np.ndarray, y: np.ndarray, use_continuity: bool = True):
+def mannwhitneyu(
+    x: np.ndarray, y: np.ndarray, use_continuity: bool = True
+) -> tuple[np.ndarray[float], np.ndarray[float]]:
     """
     Version of Mann-Whitney U-test that runs in parallel on 2d arrays
 
