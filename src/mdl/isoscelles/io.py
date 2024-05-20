@@ -3,25 +3,34 @@ import gzip
 from collections import defaultdict
 from itertools import islice
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, TextIO
 
 import h5py
 import numpy as np
 import scipy.io
 import sparse
 
+BarcodeFeatureTuple = tuple[sparse.GCXS, Sequence[str], Sequence[tuple[str, str]]]
 
-def _optional_gzip(path: str | Path, mode: str = "rt"):
+
+def _optional_gzip(path: str | Path, mode: str = "rt") -> TextIO:
     if Path(path).suffix == ".gz":
         return gzip.open(path, mode)
     else:
         return open(path, mode)
 
 
-def read_10x_h5(path: str | Path):
+def read_10x_h5(path: str | Path) -> BarcodeFeatureTuple:
     """
     Read a 10x cellranger h5 file and return the data as a sparse GCXS array,
     along with tuples containing the barcodes and genes
+
+    Args:
+        path: the path to 10x-formatted hdf5 file
+
+    Returns:
+        The sparse count array, along with the barcodes and features
+
     """
     with h5py.File(path, "r") as fh:
         M, N = fh["matrix"]["shape"]
@@ -40,10 +49,17 @@ def read_10x_h5(path: str | Path):
     return matrix, barcodes, genes
 
 
-def read_mtx(path: str | Path):
+def read_mtx(path: str | Path) -> sparse.GCXS:
     """
     Read an mtx file and return a sparse GCXS array. Transposes the input,
     because files are usually gene x cell and we want cell x gene
+
+    Args:
+        path: path to an mtx-formatted count file, optionally gzipped
+
+    Returns:
+        The sparse count array
+
     """
     with _optional_gzip(path, "rb") as fh:
         m = scipy.io.mmread(fh).astype(np.int32)
@@ -58,7 +74,7 @@ def isoquant_matrix(
     valid_assignments=("unique", "unique_minor_difference"),
     barcode_list: Sequence[str] = None,
     feature_list: Sequence[tuple[str, str]] = None,
-):
+) -> BarcodeFeatureTuple:
     """
     Takes the output file from IsoQuant, along with a mapping from read name to
     barcode+umi. Returns a sparse array of UMI counts in GCXS format. The size of the

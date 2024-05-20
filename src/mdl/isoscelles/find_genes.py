@@ -6,11 +6,11 @@ from .stats import mannwhitneyu
 
 @nb.njit
 def calc_nz(
-    count_array: np.ndarray,
-    nz_array: np.ndarray,
-    group1: np.ndarray,
-    group2: np.ndarray,
-):
+    count_array: np.ndarray[int],
+    nz_array: np.ndarray[float],
+    group1: np.ndarray[int],
+    group2: np.ndarray[int],
+) -> tuple[np.ndarray[float], np.ndarray[float]]:
     """Aggregates the percent nonzero for two groups of clusters, using pre-calculated
     count and number-nonzero arrays.
 
@@ -35,7 +35,11 @@ def calc_nz(
 
 @nb.njit
 def calc_filter(
-    nz_1: np.ndarray, nz_2: np.ndarray, *, delta_nz: float, max_nz_b: float
+    nz_1: np.ndarray[float],
+    nz_2: np.ndarray[float],
+    *,
+    delta_nz: float,
+    max_nz_b: float,
 ) -> np.ndarray[bool]:
     """Calculate the per-feature filter for a comparison: the nonzero percentage must
     exceed `delta_nz` and the percentage for the lower of the groups must be less than
@@ -75,16 +79,28 @@ def calc_subsample(n_samples: int, subsample: int) -> np.ndarray[int]:
 
 def de(
     data: np.ndarray,
-    clusters: np.ndarray,
-    group1: np.ndarray,
-    group2: np.ndarray,
-    gene_filter: np.ndarray,
+    clusters: np.ndarray[int],
+    group1: np.ndarray[int],
+    group2: np.ndarray[int],
+    gene_filter: np.ndarray[bool],
     subsample: int = None,
-):
+) -> tuple[np.ndarray[float], np.ndarray[float]]:
     """
     Compute differential expression of two groups of clusters using Mann-Whitney U-test.
     This function assumes that the data has already been clustered and we are comparing
     two groups of clusters.
+
+    Args:
+        data: a barcode-by-feature array of counts
+        clusters: an array denoting cluster membership
+        group1: index array into `n_clusters` designating clusters in group 1
+        group2: index array into `n_clusters` designating clusters in group 2
+        gene_filter: boolean array that indicates which features to compare
+        subsample: the maximum number of barcodes to compare
+
+    Returns:
+        u: an array of U values for the tests. Excluded features are set to 0
+        logp: log(p-value) for each feature. Excluded features are set to 0
     """
     c_a = np.isin(clusters, group1)
     c_b = np.isin(clusters, group2)
