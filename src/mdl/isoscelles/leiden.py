@@ -11,6 +11,8 @@ from .neighbors import calc_graph
 
 log = logging.getLogger(__name__)
 
+NodeID = tuple[int, ...]
+
 
 def leiden_sweep(
     graph: ig.Graph,
@@ -121,7 +123,7 @@ def recursive_cluster(
     feature_cutoff_pct: float = 0.05,
     feature_cutoff_logp: int | float = -5,
     cluster_ratio: int | float = 4,
-) -> tuple[dict[tuple[int, ...], np.ndarray], dict[tuple[int, ...], float]]:
+) -> tuple[dict[NodeID, np.ndarray], dict[NodeID, float]]:
     """
     Given a complete dataset, recursively subcluster the cells until no more clusters
     can be found using the given thresholds.
@@ -189,3 +191,62 @@ def recursive_cluster(
 
     # convert to dict so output can be pickled and to prevent extra keys
     return dict(clusters), cluster_res
+
+
+def cluster_leaf_nodes(
+    clusters: dict[NodeID, np.ndarray], *, n: int = 80
+) -> Counter[NodeID]:
+    """
+    Takes a recursive clustering and applies a size cutoff to each level, pruning the
+    outliers. Returns a counter of leaf nodes (terminal clusters) and their cell counts
+    """
+    subcluster_counts = {k: Counter(clusters[k]) for k in clusters}
+
+    leaf_nodes = Counter(
+        {
+            node_id: subcluster_counts[k][i]
+            for k in subcluster_counts
+            for i in subcluster_counts[k]
+            if i > -1
+            and (node_id := (k + (i,))) not in subcluster_counts
+            and subcluster_counts[k][i] > n
+        }
+    )
+
+    return leaf_nodes
+
+
+def cluster_labels(
+    clusters: dict[NodeID, np.ndarray],
+    leaf_nodes: Counter[NodeID] = None,
+    *,
+    n: int = 80,
+) -> list[NodeID]:
+    """
+    Converts from the dictionary of clustering to a list of cell labels reflecting the
+    hierarchical clustering, with internal unclustered cells labeled as best they can be
+    """
+    n_cells = clusters[()].shape[0]
+    max_len = max(map(len, clusters))
+
+    cell_labels = -1 * np.ones((n_cells, max_len + 1), dtype=np.int16)
+
+    for node_id in sorted(clusters, key=lambda k: (len(k), k)):
+        if node_id == ():
+            ci = slice(None)
+        else:
+            ci = clusters[node_id[:-1]] == node_id[-1]
+        cell_labels[ci, len(node_id)] = clusters[node_id][ci]
+
+    a = cell_labels > -1
+
+    assert np.all(a.all(1) | (a.sum(1) == a.argmin(1)))
+
+    if leaf_nodes is None:
+        leaf_nodes = cluster_leaf_nodes(clusters, n)
+
+    cell_labels = [
+        k[: i - (k[:i] not in leaf_nodes)]
+        for k, i in zip(map(tuple, cell_labels), a.sum(1))
+    ]
+    return cell_labels
