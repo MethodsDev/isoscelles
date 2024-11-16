@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "isoscelles"
 description = "Tools for isoform-level analysis of single-cell data, primarily MAS-iso-seq"
+version = "0.0.1"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
@@ -15,15 +16,19 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
+dependencies = [
+    "h5py",
+    "leidenalg",
+    "numba",
+    "numpy",
+    "pynndescent",
+    "scipy",
+    "sparse",
+]
 optional-dependencies = { dev = ["pre-commit", "ruff"] }
-dynamic = ["dependencies", "version"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.setuptools.dynamic]
-dependencies = {file = "requirements.txt"}
-version = {attr = "mdl.isoscelles.__version__"}
 
 [tool.ruff]
 src = ["src"]
