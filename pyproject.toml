@@ -27,9 +27,6 @@ dependencies = [
 ]
 optional-dependencies = { dev = ["pre-commit", "ruff"] }
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
 [tool.ruff]
 src = ["src"]
 select = ["E", "F", "I", "A"]
